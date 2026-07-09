@@ -1,0 +1,84 @@
+name: Freshness
+
+# Deliberately never GitHub's native `schedule:` trigger: GitHub
+# auto-disables schedule-triggered workflows after 60 days of repository
+# inactivity, which would silently break this without an external caller
+# noticing. Both triggers below are externally invoked instead:
+#   - workflow_dispatch: Tinfoil's control plane, on a cadence tighter than
+#     verifiers' hardcoded MaxFreshnessAge (e.g. every 5-6 days against a
+#     7-day window), or a manual run.
+#   - repository_dispatch (freshness-check): a tracked repo's own release
+#     workflow, right after publishing a new release. Same convention as
+#     platform-endorsements/build.yml's existing legacy-republish trigger.
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Single tracked repo to check (owner/name). Leave empty to check every repo in repos.json."
+        required: false
+  repository_dispatch:
+    types: [freshness-check]
+
+permissions:
+  id-token: write
+  attestations: write
+  contents: read
+
+jobs:
+  # Resolves which repo(s) this run should check: the repository_dispatch
+  # payload's repo, the workflow_dispatch input's repo, or (default) every
+  # repo in repos.json.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      repos: ${{ steps.resolve.outputs.repos }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Resolve target repo(s)
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
+          INPUT_REPO: ${{ github.event.inputs.repo }}
+        run: |
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            REPOS=$(jq -nc --arg r "$DISPATCH_REPO" '[$r]')
+          elif [ -n "$INPUT_REPO" ]; then
+            REPOS=$(jq -nc --arg r "$INPUT_REPO" '[$r]')
+          else
+            REPOS=$(jq -c '.' repos.json)
+          fi
+          echo "repos=$REPOS" >> "$GITHUB_OUTPUT"
+
+  # One freshness witness per tracked repo, each an independent Sigstore
+  # attestation against that repo's current release digest - never a single
+  # signature/manifest covering every tracked repo (see design doc: a shared
+  # manifest would leak the full tracked-repo list to anyone verifying one
+  # entry).
+  witness:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJson(needs.plan.outputs.repos) }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Resolve latest release and build predicate
+        id: predicate
+        run: ./scripts/check-and-attest.sh "${{ matrix.repo }}"
+
+      # No witness file is hosted in this repo: actions/attest accepts a
+      # bare subject-name + subject-digest (no subject-path), so this
+      # attests directly against the tracked repo's own release digest.
+      # Verifiers look this up by that same digest via GitHub's Artifact
+      # Attestations API - see README.
+      - name: Attest freshness witness
+        uses: actions/attest@67422f5511b7ff725f4dbd6fb9bd2cd925c65a8d  # v1.4.1
+        with:
+          subject-name: ${{ steps.predicate.outputs.subject_name }}
+          subject-digest: ${{ steps.predicate.outputs.subject_digest }}
+          predicate-type: https://tinfoil.sh/predicate/freshness-witness/v1
+          predicate-path: predicate.json
