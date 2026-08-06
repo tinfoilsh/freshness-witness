@@ -7,7 +7,9 @@ re-endorsement — without needing a revocation mechanism.
 
 Predicate: `https://tinfoil.sh/predicate/freshness-witness/v1`
 
-Status: **pilot**, tracking `tinfoilsh/platform-endorsements` only.
+Status: **v3 launch registry**, tracking platform endorsements and every
+public code repository used by the production router inventory, plus the
+router and debug canary repositories.
 
 ## How it works
 
@@ -21,17 +23,18 @@ For each tracked repo (`repos.json`), the workflow:
    attestation against the verified source attestation's same subject name and
    digest. No witness file is hosted in this repo.
 
-A verifier holding a digest for `tinfoilsh/platform-endorsements` (or any
-other tracked repo) looks up its freshness witness with one call to GitHub's
+A verifier holding a digest for any tracked artifact looks up its freshness
+witness with one call to GitHub's
 Artifact Attestations API, keyed by that same digest:
 
 ```
 GET https://api.github.com/repos/tinfoilsh/freshness-witness/attestations/sha256:<digest>
 ```
 
-If a recent witness exists (`issued_at` within the verifier's hardcoded
-`MaxFreshnessAge`, e.g. 7 days) and it's signed by this repo's expected
-workflow identity, the artifact at that digest is considered fresh.
+If a recent witness exists (its verified RFC 3161 timestamp is within the
+verifier's hardcoded `MaxFreshnessAge`, currently seven days) and it is signed
+by this repo's expected workflow identity, the artifact at that digest is
+considered fresh.
 
 ## Witness shape
 
@@ -39,11 +42,11 @@ workflow identity, the artifact at that digest is considered fresh.
 {
   "format": "https://tinfoil.sh/predicate/freshness-witness/v1",
   "endorses": {
-    "repo": "tinfoilsh/platform-endorsements",
-    "tag": "v0.0.4",
+    "repo": "tinfoilsh/confidential-model-router",
+    "tag": "v0.0.135",
     "commit": "<40-character Git commit>",
     "subject": {
-      "name": "platform-endorsements.json",
+      "name": "tinfoil-deployment.json",
       "digest": "sha256:<hex>"
     }
   }
@@ -73,6 +76,7 @@ noticing. Both triggers above are externally invoked instead.
 
 ## `repos.json`
 
-A hardcoded list for the pilot. Will be replaced by a query against
-Tinfoil's control plane once the pilot's design is validated — see open
-questions in the design doc.
+A hardcoded public launch list. The production router configuration currently
+provides the deployed model-repository set; controlplane's active container
+records are the intended longer-term source for all deployments. Replacing the
+registry changes discovery only, not the witness or verifier wire format.
