@@ -7,23 +7,19 @@ re-endorsement — without needing a revocation mechanism.
 
 Predicate: `https://tinfoil.sh/predicate/freshness-witness/v1`
 
-Design background and open questions:
-[`PLATFORM_FRESHNESS_PILOT.md`](https://github.com/tinfoilsh/workspace-attestation/blob/main/sdk-flywheel/v3/PLATFORM_FRESHNESS_PILOT.md)
-in the `workspace-attestation` monorepo.
-
 Status: **pilot**, tracking `tinfoilsh/platform-endorsements` only.
 
 ## How it works
 
 For each tracked repo (`repos.json`), the workflow:
 
-1. Resolves the repo's current `releases/latest` tag and the digest of its
-   `tinfoil.hash` release asset.
-2. Publishes an [`actions/attest`](https://github.com/actions/attest)
-   attestation **directly against that digest** (`subject-digest`, no
-   `subject-path`) — no witness file is hosted in this repo. The subject
-   digest is whatever the tracked repo's release already published; this
-   repo only vouches that it re-checked it recently.
+1. Resolves the repo's current release tag and commit, downloads its artifact,
+   and checks the published `tinfoil.hash`.
+2. Independently verifies the artifact's existing Sigstore attestation against
+   the configured predicate and workflow identity.
+3. Publishes an [`actions/attest`](https://github.com/actions/attest)
+   attestation against the verified source attestation's same subject name and
+   digest. No witness file is hosted in this repo.
 
 A verifier holding a digest for `tinfoilsh/platform-endorsements` (or any
 other tracked repo) looks up its freshness witness with one call to GitHub's
@@ -44,16 +40,19 @@ workflow identity, the artifact at that digest is considered fresh.
   "format": "https://tinfoil.sh/predicate/freshness-witness/v1",
   "endorses": {
     "repo": "tinfoilsh/platform-endorsements",
-    "tag": "v0.3.1",
-    "digest": "sha256:<hex>"
-  },
-  "issued_at": "2026-07-08T00:00:00Z"
+    "tag": "v0.0.4",
+    "commit": "<40-character Git commit>",
+    "subject": {
+      "name": "platform-endorsements.json",
+      "digest": "sha256:<hex>"
+    }
+  }
 }
 ```
 
-There is deliberately **no `expires_at` field** — the trust window is a
-hardcoded constant in each verifier, not something this repo's pipeline
-gets to declare. See the design doc for the full rationale.
+There are deliberately no publisher-controlled time fields. Verifiers use the
+earliest authenticated RFC 3161 timestamp from GitHub's Sigstore bundle and
+enforce a hardcoded seven-day maximum age.
 
 ## Triggers
 
@@ -61,10 +60,9 @@ gets to declare. See the design doc for the full rationale.
   cadence tighter than the verifier-side `MaxFreshnessAge` (e.g. every 5–6
   days), re-signing every tracked repo unconditionally — this is the
   heartbeat that keeps witnesses from aging out.
-- **Event-driven**: `repository_dispatch` (`freshness-check` event type),
-  fired by a tracked repo's own release workflow right after it publishes a
-  new release — same convention as `platform-endorsements/build.yml`'s
-  existing legacy-republish trigger. Only the affected repo is re-checked.
+- **Event-driven**: a tracked release proves its repository identity to the
+  Tinfoil control plane with GitHub Actions OIDC; the control plane dispatches
+  this workflow for only that repository.
 - **Manual**: `workflow_dispatch`, optionally scoped to a single repo via
   the `repo` input; defaults to every repo in `repos.json`.
 

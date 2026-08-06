@@ -3,21 +3,14 @@ name: Freshness
 # Deliberately never GitHub's native `schedule:` trigger: GitHub
 # auto-disables schedule-triggered workflows after 60 days of repository
 # inactivity, which would silently break this without an external caller
-# noticing. Both triggers below are externally invoked instead:
-#   - workflow_dispatch: Tinfoil's control plane, on a cadence tighter than
-#     verifiers' hardcoded MaxFreshnessAge (e.g. every 5-6 days against a
-#     7-day window), or a manual run.
-#   - repository_dispatch (freshness-check): a tracked repo's own release
-#     workflow, right after publishing a new release. Same convention as
-#     platform-endorsements/build.yml's existing legacy-republish trigger.
+# noticing. The control plane dispatches this workflow every five days and
+# immediately after a tracked release proves its identity with GitHub OIDC.
 on:
   workflow_dispatch:
     inputs:
       repo:
-        description: "Single tracked repo to check (owner/name). Leave empty to check every repo in repos.json."
+        description: "Single tracked repo to check (owner/name). Leave empty to check every configured repo."
         required: false
-  repository_dispatch:
-    types: [freshness-check]
 
 permissions:
   id-token: write
@@ -25,9 +18,8 @@ permissions:
   contents: read
 
 jobs:
-  # Resolves which repo(s) this run should check: the repository_dispatch
-  # payload's repo, the workflow_dispatch input's repo, or (default) every
-  # repo in repos.json.
+  # Resolve a requested repository against the allowlist, or default to every
+  # configured repository for the scheduled heartbeat.
   plan:
     runs-on: ubuntu-latest
     outputs:
@@ -38,14 +30,10 @@ jobs:
       - name: Resolve target repo(s)
         id: resolve
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
           INPUT_REPO: ${{ github.event.inputs.repo }}
         run: |
-          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
-            REPOS=$(jq -nc --arg r "$DISPATCH_REPO" '[$r]')
-          elif [ -n "$INPUT_REPO" ]; then
-            REPOS=$(jq -nc --arg r "$INPUT_REPO" '[$r]')
+          if [ -n "$INPUT_REPO" ]; then
+            REPOS=$(jq -ce --arg r "$INPUT_REPO" '[.[] | select(.repo == $r)] | if length == 1 then . else error("repo is not configured") end' repos.json)
           else
             REPOS=$(jq -c '.' repos.json)
           fi
@@ -62,13 +50,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        repo: ${{ fromJson(needs.plan.outputs.repos) }}
+        target: ${{ fromJson(needs.plan.outputs.repos) }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Resolve latest release and build predicate
+      - name: Ensure GitHub CLI supports attestations
+        run: |
+          version=$(gh --version | head -n1 | awk '{print $3}')
+          required=2.67.0
+          if [ "$(printf '%s\n' "$required" "$version" | sort -V | head -n1)" != "$required" ]; then
+            echo "GitHub CLI ${version} is older than required ${required}" >&2
+            exit 1
+          fi
+
+      - name: Verify latest release and build predicate
         id: predicate
-        run: ./scripts/check-and-attest.sh "${{ matrix.repo }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/check-and-attest.sh '${{ toJson(matrix.target) }}'
 
       # No witness file is hosted in this repo: actions/attest accepts a
       # bare subject-name + subject-digest (no subject-path), so this

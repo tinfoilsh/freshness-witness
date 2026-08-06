@@ -1,3 +1,8 @@
 [
-  "tinfoilsh/platform-endorsements"
+  {
+    "repo": "tinfoilsh/platform-endorsements",
+    "artifact": "platform-endorsements.json",
+    "predicate_type": "https://tinfoil.sh/predicate/platform-endorsements/v1",
+    "signer_workflow": "tinfoilsh/platform-endorsements/.github/workflows/build.yml"
+  }
 ]
