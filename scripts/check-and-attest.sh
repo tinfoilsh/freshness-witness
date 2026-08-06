@@ -1,48 +1,69 @@
 #!/bin/bash
-# Resolves a tracked repo's current releases/latest tag and tinfoil.hash
-# digest, and writes the freshness-witness predicate for it to
-# predicate.json in the current directory.
-#
-# Run from the repository root: ./scripts/check-and-attest.sh <owner/repo>
-#
-# When $GITHUB_OUTPUT is set, also emits subject_name/subject_digest/tag for
-# a subsequent actions/attest step to consume.
 set -euo pipefail
 
-REPO="${1:?usage: check-and-attest.sh <owner/repo>}"
+TARGET=${1:?usage: check-and-attest.sh '<repos.json object>'}
+REPO=$(jq -er '.repo' <<<"$TARGET")
+ARTIFACT=$(jq -er '.artifact' <<<"$TARGET")
+PREDICATE_TYPE=$(jq -er '.predicate_type' <<<"$TARGET")
+SIGNER_WORKFLOW=$(jq -er '.signer_workflow' <<<"$TARGET")
 
-TAG=$(curl -sS "https://api.github.com/repos/${REPO}/releases/latest" | jq -r '.tag_name // empty')
-if [ -z "$TAG" ]; then
-  echo "no releases/latest found for ${REPO}" >&2
+TAG=$(gh api "repos/${REPO}/releases/latest" --jq '.tag_name')
+COMMIT=$(gh api "repos/${REPO}/commits/${TAG}" --jq '.sha')
+if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "invalid commit resolved for ${REPO}@${TAG}: ${COMMIT}" >&2
   exit 1
 fi
 
-DIGEST=$(curl -sSL "https://github.com/${REPO}/releases/download/${TAG}/tinfoil.hash" | tr -d '[:space:]')
-if [ -z "$DIGEST" ]; then
-  echo "no tinfoil.hash asset found for ${REPO}@${TAG}" >&2
+workdir=$(mktemp -d)
+trap 'rm -rf "$workdir"' EXIT
+gh release download "$TAG" --repo "$REPO" --dir "$workdir" --pattern "$ARTIFACT" --pattern tinfoil.hash
+
+DIGEST=$(tr -d '[:space:]' <"$workdir/tinfoil.hash")
+if ! [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "invalid tinfoil.hash for ${REPO}@${TAG}" >&2
+  exit 1
+fi
+ACTUAL_DIGEST=$(sha256sum "$workdir/$ARTIFACT" | cut -d ' ' -f 1)
+if [ "$ACTUAL_DIGEST" != "$DIGEST" ]; then
+  echo "release digest mismatch for ${REPO}@${TAG}: expected ${DIGEST}, got ${ACTUAL_DIGEST}" >&2
   exit 1
 fi
 
-ISSUED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+gh attestation verify "$workdir/$ARTIFACT" \
+  --repo "$REPO" \
+  --predicate-type "$PREDICATE_TYPE" \
+  --signer-workflow "$SIGNER_WORKFLOW" \
+  --source-ref "refs/tags/${TAG}" \
+  --deny-self-hosted-runners \
+  --format json >"$workdir/verification.json"
+
+SUBJECT_NAME=$(jq -er '
+  [.[].verificationResult.statement.subject[].name] | unique |
+  if length == 1 then .[0] else error("verified attestations disagree on subject name") end
+' "$workdir/verification.json")
 
 jq -n \
   --arg repo "$REPO" \
   --arg tag "$TAG" \
-  --arg digest "sha256:${DIGEST}" \
-  --arg issued_at "$ISSUED_AT" \
+  --arg commit "$COMMIT" \
+  --arg subject_name "$SUBJECT_NAME" \
+  --arg subject_digest "sha256:${DIGEST}" \
   '{
     format: "https://tinfoil.sh/predicate/freshness-witness/v1",
-    endorses: {repo: $repo, tag: $tag, digest: $digest},
-    issued_at: $issued_at
-  }' > predicate.json
+    endorses: {
+      repo: $repo,
+      tag: $tag,
+      commit: $commit,
+      subject: {name: $subject_name, digest: $subject_digest}
+    }
+  }' >predicate.json
 
-echo "freshness witness predicate for ${REPO}@${TAG} (sha256:${DIGEST}):"
+echo "freshness witness predicate for ${REPO}@${TAG} (${COMMIT}):"
 cat predicate.json
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   {
-    echo "subject_name=${REPO}"
+    echo "subject_name=${SUBJECT_NAME}"
     echo "subject_digest=sha256:${DIGEST}"
-    echo "tag=${TAG}"
-  } >> "$GITHUB_OUTPUT"
+  } >>"$GITHUB_OUTPUT"
 fi
