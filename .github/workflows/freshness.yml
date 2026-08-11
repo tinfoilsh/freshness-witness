@@ -11,6 +11,9 @@ on:
       repo:
         description: "Single tracked repo to check (owner/name). Leave empty to check every configured repo."
         required: false
+      tag:
+        description: "Exact release tag to check. Requires repo; leave empty for the latest release."
+        required: false
 
 permissions:
   id-token: write
@@ -31,7 +34,12 @@ jobs:
         id: resolve
         env:
           INPUT_REPO: ${{ github.event.inputs.repo }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
+          if [ -n "$INPUT_TAG" ] && [ -z "$INPUT_REPO" ]; then
+            echo "tag requires repo" >&2
+            exit 1
+          fi
           if [ -n "$INPUT_REPO" ]; then
             REPOS=$(jq -ce --arg r "$INPUT_REPO" '[.[] | select(.repo == $r)] | if length == 1 then . else error("repo is not configured") end' repos.json)
           else
@@ -64,10 +72,11 @@ jobs:
             exit 1
           fi
 
-      - name: Verify latest release and build predicate
+      - name: Verify release and build predicate
         id: predicate
         env:
           GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ github.event.inputs.tag }}
         run: ./scripts/check-and-attest.sh '${{ toJson(matrix.target) }}'
 
       # No witness file is hosted in this repo: actions/attest accepts a

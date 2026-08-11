@@ -7,7 +7,14 @@ ARTIFACT=$(jq -er '.artifact' <<<"$TARGET")
 PREDICATE_TYPE=$(jq -er '.predicate_type' <<<"$TARGET")
 SIGNER_WORKFLOW=$(jq -er '.signer_workflow' <<<"$TARGET")
 
-TAG=$(gh api "repos/${REPO}/releases/latest" --jq '.tag_name')
+TAG=${REQUESTED_TAG:-}
+if [ -z "$TAG" ]; then
+  TAG=$(gh api "repos/${REPO}/releases/latest" --jq '.tag_name')
+fi
+if ! git check-ref-format "refs/tags/${TAG}" >/dev/null || [[ "$TAG" == -* ]]; then
+  echo "invalid release tag for ${REPO}: ${TAG}" >&2
+  exit 1
+fi
 COMMIT=$(gh api "repos/${REPO}/commits/${TAG}" --jq '.sha')
 if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   echo "invalid commit resolved for ${REPO}@${TAG}: ${COMMIT}" >&2

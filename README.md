@@ -15,8 +15,9 @@ router and debug canary repositories.
 
 For each tracked repo (`repos.json`), the workflow:
 
-1. Resolves the repo's current release tag and commit, downloads its artifact,
-   and checks the published `tinfoil.hash`.
+1. Resolves the requested release tag and commit (or the current latest
+   release for a scheduled heartbeat), downloads its artifact, and checks the
+   published `tinfoil.hash`.
 2. Independently verifies the artifact's existing Sigstore attestation against
    the configured predicate and workflow identity.
 3. Publishes an [`actions/attest`](https://github.com/actions/attest)
@@ -63,11 +64,12 @@ enforce a hardcoded seven-day maximum age.
   cadence tighter than the verifier-side `MaxFreshnessAge` (e.g. every 5–6
   days), re-signing every tracked repo unconditionally — this is the
   heartbeat that keeps witnesses from aging out.
-- **Event-driven**: a tracked release proves its repository identity to the
-  Tinfoil control plane with GitHub Actions OIDC; the control plane dispatches
-  this workflow for only that repository.
+- **Event-driven**: a tracked release proves its repository and exact tag ref
+  to the Tinfoil control plane with GitHub Actions OIDC; the control plane
+  dispatches this workflow for only that repository and release tag.
 - **Manual**: `workflow_dispatch`, optionally scoped to a single repo via
-  the `repo` input; defaults to every repo in `repos.json`.
+  the `repo` input and an exact release via `tag`; defaults to every repo's
+  latest release in `repos.json`.
 
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
