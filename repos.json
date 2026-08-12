@@ -96,15 +96,39 @@
     "signer_workflow": "tinfoilsh/confidential-realtime-models/.github/workflows/tinfoil-release-publish.yml"
   },
   {
+    "repo": "tinfoilsh/confidential-summarizer",
+    "artifact": "tinfoil-deployment.json",
+    "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
+    "signer_workflow": "tinfoilsh/confidential-summarizer/.github/workflows/tinfoil-release-publish.yml"
+  },
+  {
+    "repo": "tinfoilsh/confidential-sync",
+    "artifact": "tinfoil-deployment.json",
+    "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
+    "signer_workflow": "tinfoilsh/confidential-sync/.github/workflows/tinfoil-release-publish.yml"
+  },
+  {
     "repo": "tinfoilsh/confidential-voxtral-small-24b",
     "artifact": "tinfoil-deployment.json",
     "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
     "signer_workflow": "tinfoilsh/confidential-voxtral-small-24b/.github/workflows/tinfoil-release-publish.yml"
   },
   {
+    "repo": "tinfoilsh/confidential-website-metadata-fetcher",
+    "artifact": "tinfoil-deployment.json",
+    "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
+    "signer_workflow": "tinfoilsh/confidential-website-metadata-fetcher/.github/workflows/tinfoil-release-publish.yml"
+  },
+  {
     "repo": "tinfoilsh/confidential-websearch",
     "artifact": "tinfoil-deployment.json",
     "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
     "signer_workflow": "tinfoilsh/confidential-websearch/.github/workflows/tinfoil-release-publish.yml"
+  },
+  {
+    "repo": "tinfoilsh/verifiable-reviewer",
+    "artifact": "tinfoil-deployment.json",
+    "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
+    "signer_workflow": "tinfoilsh/verifiable-reviewer/.github/workflows/tinfoil-release-publish.yml"
   }
 ]
