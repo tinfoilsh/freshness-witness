@@ -69,6 +69,12 @@ enforce a hardcoded seven-day maximum age.
 - **Manual**: `workflow_dispatch` accepts a JSON `repos` array and an optional
   `include_platform` flag. It always witnesses latest releases.
 
+Controlplane also supplies a durable `request_id`. The workflow exposes that
+ID in its run name, and each matrix job exposes its target repository in the
+job name. This lets controlplane recover an accepted run after a restart and,
+when only part of a batch fails, retry only targets whose attestation step did
+not succeed.
+
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
 inactivity, which would silently break this without an external caller
