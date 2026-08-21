@@ -1,16 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
-TARGET=${1:?usage: check-and-attest.sh '<repos.json object>'}
-REPO=$(jq -er '.repo' <<<"$TARGET")
-ARTIFACT=$(jq -er '.artifact' <<<"$TARGET")
-PREDICATE_TYPE=$(jq -er '.predicate_type' <<<"$TARGET")
-SIGNER_WORKFLOW=$(jq -er '.signer_workflow' <<<"$TARGET")
-
-TAG=${REQUESTED_TAG:-}
-if [ -z "$TAG" ]; then
-  TAG=$(gh api "repos/${REPO}/releases/latest" --jq '.tag_name')
+REPO=${1:?usage: check-and-attest.sh owner/repo}
+if ! [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  echo "invalid repository name: ${REPO}" >&2
+  exit 1
 fi
+
+ARTIFACT=tinfoil-deployment.json
+PREDICATE_TYPE=https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1
+SIGNER_WORKFLOW="${REPO}/.github/workflows/tinfoil-release-publish.yml"
+if [ "$REPO" = tinfoilsh/platform-endorsements ]; then
+  ARTIFACT=platform-endorsements.json
+  PREDICATE_TYPE=https://tinfoil.sh/predicate/platform-endorsements/v1
+  SIGNER_WORKFLOW=tinfoilsh/platform-endorsements/.github/workflows/build.yml
+fi
+
+TAG=$(gh api "repos/${REPO}/releases/latest" --jq '.tag_name')
 if ! git check-ref-format "refs/tags/${TAG}" >/dev/null || [[ "$TAG" == -* ]]; then
   echo "invalid release tag for ${REPO}: ${TAG}" >&2
   exit 1
