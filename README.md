@@ -12,7 +12,7 @@ this repository does not maintain a second registry.
 
 ## How it works
 
-For each repository supplied by the control plane, the workflow:
+For the repository supplied by the control plane, the workflow:
 
 1. Resolves the current latest release tag and commit, downloads its artifact,
    and checks the published `tinfoil.hash`.
@@ -66,14 +66,13 @@ enforce a hardcoded seven-day maximum age.
 - **Event-driven**: a release proves its repository and exact tag ref to the
   Tinfoil control plane with GitHub Actions OIDC. If that repository is active,
   the control plane dispatches this workflow for its current latest release.
-- **Manual**: `workflow_dispatch` accepts a JSON `repos` array and an optional
-  `include_platform` flag. It always witnesses latest releases.
+- **Manual**: `workflow_dispatch` accepts one `owner/repo`. It always witnesses
+  that repository's latest release.
 
 Controlplane also supplies a durable `request_id`. The workflow exposes that
-ID in its run name, and each matrix job exposes its target repository in the
-job name. This lets controlplane recover an accepted run after a restart and,
-when only part of a batch fails, retry only targets whose attestation step did
-not succeed.
+ID in its run name so an accepted run can be recovered after a controlplane
+restart without publishing a duplicate witness. Each repository has its own
+workflow run, so failures and retries are independent.
 
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
@@ -84,5 +83,5 @@ Standard enclave repositories publish `tinfoil-deployment.json` under the
 `snp-tdx-multiplatform/v1` predicate from
 `.github/workflows/tinfoil-release-publish.yml`. The workflow derives those
 values from each repository name. The global platform-endorsements dependency
-is included once per scheduled batch with its platform-specific artifact and
-signer identity.
+is dispatched as its own target with platform-specific artifact and signer
+identity.

@@ -1,30 +1,16 @@
 name: Freshness
 run-name: Freshness ${{ inputs.request_id || github.run_id }}
 
-# Deliberately never GitHub's native `schedule:` trigger: GitHub
-# auto-disables schedule-triggered workflows after 60 days of repository
-# inactivity, which would silently break this without an external caller
-# noticing. The control plane dispatches this workflow every five days and
-# immediately after an active repository proves a release with GitHub OIDC.
+# The control plane owns scheduling because GitHub disables repository
+# schedules after 60 days without activity.
 on:
   workflow_dispatch:
     inputs:
-      repos:
-        description: "JSON array of active enclave repositories (owner/name)."
-        required: false
-        default: "[]"
-      include_platform:
-        description: "Also refresh the global platform-endorsements dependency."
-        required: false
-        default: "false"
+      repo:
+        description: "Enclave repository to witness (owner/name)."
+        required: true
       request_id:
         description: "Controlplane dispatch correlation ID."
-        required: false
-      repo:
-        description: "Deprecated compatibility input for one repository."
-        required: false
-      tag:
-        description: "Deprecated compatibility input; freshness always targets latest."
         required: false
 
 permissions:
@@ -33,64 +19,9 @@ permissions:
   contents: read
 
 jobs:
-  # Convert the control plane's active repository set into the standard
-  # enclave release verification metadata. Platform endorsements are the one
-  # global v3 dependency and use their own artifact format and signer.
-  plan:
-    runs-on: ubuntu-latest
-    outputs:
-      repos: ${{ steps.resolve.outputs.repos }}
-    steps:
-      - name: Resolve target repo(s)
-        id: resolve
-        env:
-          INPUT_REPOS: ${{ github.event.inputs.repos }}
-          INCLUDE_PLATFORM: ${{ github.event.inputs.include_platform }}
-          LEGACY_REPO: ${{ github.event.inputs.repo }}
-        run: |
-          REPOS=$(jq -nce \
-            --argjson repos "$INPUT_REPOS" \
-            --arg include_platform "$INCLUDE_PLATFORM" \
-            --arg legacy_repo "$LEGACY_REPO" '
-              if ($repos | type) != "array" then error("repos must be a JSON array") else null end |
-              if ($include_platform != "true" and $include_platform != "false") then error("include_platform must be true or false") else null end |
-              (if ($repos | length) == 0 and $legacy_repo != "" then [$legacy_repo] else $repos end) |
-              (map(
-                if type != "string" or (test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") | not)
-                then error("invalid repository name")
-                else {
-                  repo: ., artifact: "tinfoil-deployment.json",
-                  predicate_type: "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
-                  signer_workflow: (. + "/.github/workflows/tinfoil-release-publish.yml")
-                } end
-              )) as $targets |
-              if $include_platform == "true" then
-                $targets + [{
-                  repo: "tinfoilsh/platform-endorsements",
-                  artifact: "platform-endorsements.json",
-                  predicate_type: "https://tinfoil.sh/predicate/platform-endorsements/v1",
-                  signer_workflow: "tinfoilsh/platform-endorsements/.github/workflows/build.yml"
-                }]
-              else $targets end |
-              unique_by(.repo) |
-              if length == 0 then error("at least one freshness target is required") else . end
-            ')
-          echo "repos=$REPOS" >> "$GITHUB_OUTPUT"
-
-  # One freshness witness per active repo, each an independent Sigstore
-  # attestation against that repo's current release digest - never a single
-  # signature/manifest covering every tracked repo (see design doc: a shared
-  # manifest would leak the full tracked-repo list to anyone verifying one
-  # entry).
   witness:
-    name: witness (${{ matrix.target.repo }})
-    needs: plan
+    name: witness (${{ inputs.repo }})
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        target: ${{ fromJson(needs.plan.outputs.repos) }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
@@ -107,13 +38,9 @@ jobs:
         id: predicate
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./scripts/check-and-attest.sh '${{ toJson(matrix.target) }}'
+          REPO: ${{ inputs.repo }}
+        run: ./scripts/check-and-attest.sh "$REPO"
 
-      # No witness file is hosted in this repo: actions/attest accepts a
-      # bare subject-name + subject-digest (no subject-path), so this
-      # attests directly against the active repo's own release digest.
-      # Verifiers look this up by that same digest via GitHub's Artifact
-      # Attestations API - see README.
       - name: Attest freshness witness
         uses: actions/attest@67422f5511b7ff725f4dbd6fb9bd2cd925c65a8d  # v1.4.1
         with:
