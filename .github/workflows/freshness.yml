@@ -1,18 +1,14 @@
 name: Freshness
-run-name: Freshness ${{ inputs.request_id || github.run_id }}
+run-name: Freshness for ${{ inputs.repo }}
 
-# The control plane owns scheduling because GitHub disables repository
-# schedules after 60 days without activity.
+# The control plane owns discovery, scheduling, and retries. This trusted
+# workflow owns only latest-release resolution and publication.
 on:
   workflow_dispatch:
     inputs:
       repo:
         description: "Enclave repository to witness (owner/name)."
         required: true
-      request_id:
-        description: "Controlplane dispatch correlation ID."
-        required: false
-
 permissions:
   id-token: write
   attestations: write
@@ -25,19 +21,33 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Ensure GitHub CLI supports attestations
+      - name: Resolve repository identity
+        id: repository
+        env:
+          REPO: ${{ inputs.repo }}
         run: |
-          version=$(gh --version | head -n1 | awk '{print $3}')
-          required=2.67.0
-          if [ "$(printf '%s\n' "$required" "$version" | sort -V | head -n1)" != "$required" ]; then
-            echo "GitHub CLI ${version} is older than required ${required}" >&2
+          if ! [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "invalid repository name: $REPO" >&2
             exit 1
           fi
+          echo "owner=${REPO%%/*}" >> "$GITHUB_OUTPUT"
+          echo "name=${REPO#*/}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify release and build predicate
+      - name: Mint repository read token
+        id: repo-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          client-id: ${{ vars.CONTROLPLANE_GITHUB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CONTROLPLANE_GITHUB_APP_PRIVATE_KEY }}
+          owner: ${{ steps.repository.outputs.owner }}
+          repositories: ${{ steps.repository.outputs.name }}
+          permission-contents: read
+
+      - name: Resolve latest release
         id: predicate
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.repo-token.outputs.token || github.token }}
           REPO: ${{ inputs.repo }}
         run: ./scripts/check-and-attest.sh "$REPO"
 

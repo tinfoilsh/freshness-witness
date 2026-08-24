@@ -1,9 +1,8 @@
 # Tinfoil freshness witness
 
-Publishes a small, independently-signed **freshness witness** per active
-enclave repository, re-checked on a schedule and on demand, so verifiers can
-bound how long a Sigstore-published Tinfoil artifact can be trusted without an
-active re-endorsement — without needing a revocation mechanism.
+Publishes a small, independently-signed **freshness witness** for a repository's
+current latest release. Tinfoil's control plane owns repository discovery,
+scheduling, retries, and availability policy.
 
 Predicate: `https://tinfoil.sh/predicate/freshness-witness/v1`
 
@@ -14,13 +13,17 @@ this repository does not maintain a second registry.
 
 For the repository supplied by the control plane, the workflow:
 
-1. Resolves the current latest release tag and commit, downloads its artifact,
-   and checks the published `tinfoil.hash`.
-2. Independently verifies the artifact's existing Sigstore attestation against
-   the configured predicate and workflow identity.
+1. Resolves the current latest release tag and commit inside the trusted GitHub
+   worker.
+2. Reads the release's `tinfoil.hash`.
 3. Publishes an [`actions/attest`](https://github.com/actions/attest)
-   attestation against the verified source attestation's same subject name and
-   digest. No witness file is hosted in this repo.
+   attestation for that release. No witness file is hosted in this repo.
+
+The publisher intentionally does not verify the source attestation or decide
+whether a refresh is needed. Controlplane performs those checks before
+dispatching, and clients independently verify the complete source and freshness
+chain before trusting it. Invalid release metadata therefore produces evidence
+that verifiers reject rather than expanding this signing workflow's policy.
 
 A verifier holding a digest for any tracked artifact looks up its freshness
 witness with one call to GitHub's
@@ -58,30 +61,30 @@ enforce a hardcoded seven-day maximum age.
 
 ## Triggers
 
-- **Reconciled**: Tinfoil's control plane polls its active container repository
-  set every minute. Newly active repositories are witnessed immediately and
-  active repositories are renewed every five days, inside the verifier's
-  seven-day maximum age. Removing and later relaunching the final replica of a
-  repository triggers a new witness.
-- **Event-driven**: a release proves its repository and exact tag ref to the
-  Tinfoil control plane with GitHub Actions OIDC. If that repository is active,
-  the control plane dispatches this workflow for its current latest release.
-- **Manual**: `workflow_dispatch` accepts one `owner/repo`. It always witnesses
-  that repository's latest release.
+- **Reconciled**: Tinfoil's control plane checks its active repository set every
+  minute and dispatches this workflow when latest has no valid witness with more
+  than two days remaining.
+- **Promotion**: promoting a release changes GitHub latest. The same reconciler
+  observes that change and publishes the new witness; promotion waits for the
+  resulting evidence.
 
-Controlplane also supplies a durable `request_id`. The workflow exposes that
-ID in its run name so an accepted run can be recovered after a controlplane
-restart without publishing a duplicate witness. Each repository has its own
-workflow run, so failures and retries are independent.
+The workflow has one input: `owner/repo`. GitHub requires write access to this
+repository to dispatch it, while the control plane uses an Actions-write token
+scoped to this repository. Controlplane keeps the deduplication reservation;
+this trusted workflow does not need scheduling state.
+
+The worker mints a contents-read installation token restricted to that one
+repository using the same GitHub App customers install during dashboard
+onboarding. This lets private repositories use the identical flow without
+giving the control plane a tag, digest, or token input. The
+`CONTROLPLANE_GITHUB_APP_CLIENT_ID` repository variable and
+`CONTROLPLANE_GITHUB_APP_PRIVATE_KEY` repository secret configure that App.
 
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
 inactivity, which would silently break this without an external caller
 noticing. Both triggers above are externally invoked instead.
 
-Standard enclave repositories publish `tinfoil-deployment.json` under the
-`snp-tdx-multiplatform/v1` predicate from
-`.github/workflows/tinfoil-release-publish.yml`. The workflow derives those
-values from each repository name. The global platform-endorsements dependency
-is dispatched as its own target with platform-specific artifact and signer
-identity.
+Standard enclave repositories use `tinfoil-deployment.json` as the subject.
+The global platform-endorsements dependency uses
+`platform-endorsements.json`.
