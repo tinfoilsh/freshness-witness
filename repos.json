@@ -18,6 +18,12 @@
     "signer_workflow": "tinfoilsh/confidential-debug/.github/workflows/tinfoil-release-publish.yml"
   },
   {
+    "repo": "tinfoilsh/demo-private-model-delivery",
+    "artifact": "tinfoil-deployment.json",
+    "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
+    "signer_workflow": "tinfoilsh/demo-private-model-delivery/.github/workflows/tinfoil-release-publish.yml"
+  },
+  {
     "repo": "tinfoilsh/confidential-deepseek-v4-flash",
     "artifact": "tinfoil-deployment.json",
     "predicate_type": "https://tinfoil.sh/predicate/snp-tdx-multiplatform/v1",
