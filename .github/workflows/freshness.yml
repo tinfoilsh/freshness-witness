@@ -1,18 +1,28 @@
 name: Freshness
 run-name: Freshness for ${{ inputs.repo }}
 
-# The control plane owns discovery, scheduling, and retries. This trusted
-# workflow owns only latest-release resolution and publication.
+# The control plane owns the complete endorsement policy. This workflow only
+# publishes the exact repository version requested by the control plane.
 on:
   workflow_dispatch:
     inputs:
       repo:
         description: "Enclave repository to witness (owner/name)."
         required: true
+      tag:
+        description: "Release tag to witness."
+        required: true
+      digest:
+        description: "Release artifact SHA-256 digest."
+        required: true
 permissions:
   id-token: write
   attestations: write
   contents: read
+
+concurrency:
+  group: freshness-${{ inputs.repo }}
+  cancel-in-progress: true
 
 jobs:
   witness:
@@ -21,12 +31,13 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Resolve latest release
+      - name: Build predicate
         id: predicate
         env:
-          GH_TOKEN: ${{ github.token }}
           REPO: ${{ inputs.repo }}
-        run: ./scripts/check-and-attest.sh "$REPO"
+          TAG: ${{ inputs.tag }}
+          DIGEST: ${{ inputs.digest }}
+        run: ./scripts/check-and-attest.sh "$REPO" "$TAG" "$DIGEST"
 
       - name: Attest freshness witness
         uses: actions/attest@67422f5511b7ff725f4dbd6fb9bd2cd925c65a8d  # v1.4.1

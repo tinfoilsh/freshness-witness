@@ -1,8 +1,8 @@
 # Tinfoil freshness witness
 
-Publishes a small, independently-signed **freshness witness** for a repository's
-current latest release. Tinfoil's control plane owns repository discovery,
-scheduling, retries, and availability policy.
+Publishes a small, independently-signed **freshness witness** for the exact
+repository version selected by Tinfoil's control plane. The control plane owns
+repository discovery, endorsement policy, scheduling, retries, and availability.
 
 Predicate: `https://tinfoil.sh/predicate/freshness-witness/v1`
 
@@ -11,19 +11,17 @@ this repository does not maintain a second registry.
 
 ## How it works
 
-For the repository supplied by the control plane, the workflow:
+For the repository, tag, and artifact digest supplied by the control plane, the
+workflow:
 
-1. Resolves the current latest release tag and commit inside the trusted GitHub
-   worker.
-2. Reads the release's `tinfoil.hash`.
-3. Publishes an [`actions/attest`](https://github.com/actions/attest)
+1. Constructs the existing freshness predicate for that exact tuple.
+2. Publishes an [`actions/attest`](https://github.com/actions/attest)
    attestation for that release. No witness file is hosted in this repo.
 
-The publisher intentionally does not verify the source attestation or decide
-whether a refresh is needed. Controlplane performs those checks before
-dispatching, and clients independently verify the complete source and freshness
-chain before trusting it. Invalid release metadata therefore produces evidence
-that verifiers reject rather than expanding this signing workflow's policy.
+The publisher intentionally does not resolve GitHub latest, fetch release
+metadata, verify source attestations, or decide whether a refresh is needed.
+The trusted control plane makes the endorsement decision; clients independently
+verify the complete source and freshness chain before trusting it.
 
 A verifier holding a digest for any tracked artifact looks up its freshness
 witness with one call to GitHub's
@@ -46,7 +44,6 @@ considered fresh.
   "endorses": {
     "repo": "tinfoilsh/confidential-model-router",
     "tag": "v0.0.135",
-    "commit": "<40-character Git commit>",
     "subject": {
       "name": "tinfoil-deployment.json",
       "digest": "sha256:<hex>"
@@ -64,19 +61,17 @@ enforce a hardcoded seven-day maximum age.
 - **Reconciled**: Tinfoil's control plane checks its active repository set every
   minute and dispatches this workflow when latest has no valid witness with more
   than two days remaining.
-- **Promotion**: promoting a release changes GitHub latest. The same reconciler
-  observes that change and publishes the new witness; promotion waits for the
-  resulting evidence.
+- **Promotion**: the control plane first publishes and observes the candidate's
+  witness, then marks that release latest. Non-latest releases are not renewed.
 
-The workflow has one input: `owner/repo`. GitHub requires write access to this
-repository to dispatch it, while the control plane uses an Actions-write token
-scoped to this repository. Controlplane keeps the deduplication reservation;
-this trusted workflow does not need scheduling state.
+The workflow inputs are `owner/repo`, release tag, and artifact SHA-256 digest.
+GitHub requires write access to this repository to dispatch it, while the
+control plane uses an Actions-write token scoped to this repository. The control
+plane keeps the deduplication reservation; this workflow has no scheduling state.
 
-Only public repositories are supported initially. The worker checks repository
-visibility and uses its ordinary workflow token for public GitHub API reads; it
-does not mint or receive customer-repository credentials. Private repository
-support is intentionally deferred.
+Only public repositories are supported initially. The control plane enforces
+that boundary and does not hold customer-repository read tokens. Private
+repository support is intentionally deferred.
 
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
