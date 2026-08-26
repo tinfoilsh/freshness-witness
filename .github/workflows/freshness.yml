@@ -22,7 +22,7 @@ permissions:
 
 concurrency:
   group: freshness-${{ inputs.repo }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   witness:
