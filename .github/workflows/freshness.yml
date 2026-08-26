@@ -11,10 +11,10 @@ on:
         required: true
       tag:
         description: "Release tag to witness."
-        required: false
+        required: true
       digest:
         description: "Release artifact SHA-256 digest."
-        required: false
+        required: true
 permissions:
   id-token: write
   attestations: write
@@ -34,7 +34,6 @@ jobs:
       - name: Build predicate
         id: predicate
         env:
-          GH_TOKEN: ${{ github.token }}
           REPO: ${{ inputs.repo }}
           TAG: ${{ inputs.tag }}
           DIGEST: ${{ inputs.digest }}
