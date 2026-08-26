@@ -2,6 +2,19 @@
 set -euo pipefail
 
 REPO=${1:?usage: check-and-attest.sh owner/repo}
+if ! [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  echo "invalid repository name: $REPO" >&2
+  exit 1
+fi
+
+if ! PRIVATE=$(gh api "repos/${REPO}" --jq '.private'); then
+  echo "freshness witnesses currently require a public repository: ${REPO}" >&2
+  exit 1
+fi
+if [ "$PRIVATE" != false ]; then
+  echo "freshness witnesses currently require a public repository: ${REPO}" >&2
+  exit 1
+fi
 
 ARTIFACT=tinfoil-deployment.json
 if [ "$REPO" = tinfoilsh/platform-endorsements ]; then

@@ -21,33 +21,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Resolve repository identity
-        id: repository
-        env:
-          REPO: ${{ inputs.repo }}
-        run: |
-          if ! [[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-            echo "invalid repository name: $REPO" >&2
-            exit 1
-          fi
-          echo "owner=${REPO%%/*}" >> "$GITHUB_OUTPUT"
-          echo "name=${REPO#*/}" >> "$GITHUB_OUTPUT"
-
-      - name: Mint repository read token
-        id: repo-token
-        continue-on-error: true
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
-        with:
-          client-id: ${{ vars.CONTROLPLANE_GITHUB_APP_CLIENT_ID }}
-          private-key: ${{ secrets.CONTROLPLANE_GITHUB_APP_PRIVATE_KEY }}
-          owner: ${{ steps.repository.outputs.owner }}
-          repositories: ${{ steps.repository.outputs.name }}
-          permission-contents: read
-
       - name: Resolve latest release
         id: predicate
         env:
-          GH_TOKEN: ${{ steps.repo-token.outputs.token || github.token }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ inputs.repo }}
         run: ./scripts/check-and-attest.sh "$REPO"
 
