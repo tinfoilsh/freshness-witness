@@ -73,12 +73,10 @@ repository to dispatch it, while the control plane uses an Actions-write token
 scoped to this repository. Controlplane keeps the deduplication reservation;
 this trusted workflow does not need scheduling state.
 
-The worker mints a contents-read installation token restricted to that one
-repository using the same GitHub App customers install during dashboard
-onboarding. This lets private repositories use the identical flow without
-giving the control plane a tag, digest, or token input. The
-`CONTROLPLANE_GITHUB_APP_CLIENT_ID` repository variable and
-`CONTROLPLANE_GITHUB_APP_PRIVATE_KEY` repository secret configure that App.
+Only public repositories are supported initially. The worker checks repository
+visibility and uses its ordinary workflow token for public GitHub API reads; it
+does not mint or receive customer-repository credentials. Private repository
+support is intentionally deferred.
 
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
