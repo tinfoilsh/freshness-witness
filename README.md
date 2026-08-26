@@ -69,6 +69,10 @@ GitHub requires write access to this repository to dispatch it, while the
 control plane uses an Actions-write token scoped to this repository. The control
 plane keeps the deduplication reservation; this workflow has no scheduling state.
 
+During the coordinated rollout, the workflow temporarily accepts the old
+repo-only request and resolves its latest release. A follow-up removes that
+fallback after the control plane sends the exact tuple everywhere.
+
 Only public repositories are supported initially. The control plane enforces
 that boundary and does not hold customer-repository read tokens. Private
 repository support is intentionally deferred.
