@@ -61,9 +61,10 @@ enforce a hardcoded seven-day maximum age.
 - **Reconciled**: Tinfoil's control plane checks its active repository set every
   minute and dispatches this workflow when latest has no valid witness with more
   than two days remaining.
-- **Promotion**: the control plane publishes the candidate's witness while it
-  boots, then marks the already-endorsed release latest only when the candidate
-  is accepted. Non-latest releases are not renewed.
+- **Switching latest**: when requested for a deploy, the control plane first
+  dispatches an exact endorsement and then immediately marks that release
+  latest. Deployment launch and acceptance never wait for witness publication.
+  Non-latest releases are not renewed.
 
 The workflow inputs are `owner/repo`, release tag, and artifact SHA-256 digest.
 GitHub requires write access to this repository to dispatch it, while the
