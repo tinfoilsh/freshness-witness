@@ -1,0 +1,98 @@
+name: Private freshness witness
+run-name: Freshness for ${{ github.repository }}@${{ inputs.tag }}
+
+# This workflow is called from a customer's private repository. GitHub runs it
+# in the caller's repository context, so github.token is scoped to that repo and
+# actions/attest stores the resulting bundle in that repo's private attestation
+# store. No GitHub credential is passed by Tinfoil to this workflow.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to witness."
+        required: true
+        type: string
+      digest:
+        description: "Release artifact SHA-256 digest."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: tinfoil-freshness-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  witness:
+    name: witness (${{ github.repository }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authorize control-plane dispatch
+        env:
+          ACTOR_ID: ${{ github.actor_id }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          if [[ "$ACTOR_ID" != "195980381" || "$TRIGGERING_ACTOR" != "tinfoil[bot]" ]]; then
+            echo "freshness may only be dispatched by the Tinfoil GitHub App" >&2
+            exit 1
+          fi
+
+      - name: Build predicate
+        id: predicate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          DIGEST: ${{ inputs.digest }}
+        run: |
+          set -euo pipefail
+          if ! git check-ref-format "refs/tags/${TAG}" >/dev/null || [[ "$TAG" == -* ]]; then
+            echo "invalid release tag for ${REPO}: ${TAG}" >&2
+            exit 1
+          fi
+          if ! [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "invalid release digest for ${REPO}@${TAG}" >&2
+            exit 1
+          fi
+
+          COMMIT=$(gh api "repos/${REPO}/commits/${TAG}" --jq .sha)
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "invalid commit resolved for ${REPO}@${TAG}: ${COMMIT}" >&2
+            exit 1
+          fi
+
+          jq -n \
+            --arg repo "$REPO" \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT" \
+            --arg subject_digest "sha256:${DIGEST}" \
+            '{
+              format: "https://tinfoil.sh/predicate/freshness-witness/v1",
+              endorses: {
+                repo: $repo,
+                tag: $tag,
+                commit: $commit,
+                subject: {
+                  name: "tinfoil-deployment.json",
+                  digest: $subject_digest
+                }
+              }
+            }' >predicate.json
+
+          {
+            echo "subject_name=tinfoil-deployment.json"
+            echo "subject_digest=sha256:${DIGEST}"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Attest freshness witness
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.0.0
+        with:
+          subject-name: ${{ steps.predicate.outputs.subject_name }}
+          subject-digest: ${{ steps.predicate.outputs.subject_digest }}
+          predicate-type: https://tinfoil.sh/predicate/freshness-witness/v1
+          predicate-path: predicate.json

@@ -24,9 +24,9 @@ metadata, verify source attestations, or decide whether a refresh is needed.
 The trusted control plane makes the endorsement decision; clients independently
 verify the complete source and freshness chain before trusting it.
 
-A verifier holding a digest for any tracked artifact looks up its freshness
-witness with one call to GitHub's
-Artifact Attestations API, keyed by that same digest:
+A verifier holding a digest for any tracked public artifact looks up its
+freshness witness with one call to GitHub's Artifact Attestations API, keyed by
+that same digest:
 
 ```
 GET https://api.github.com/repos/tinfoilsh/freshness-witness/attestations/sha256:<digest>
@@ -73,9 +73,26 @@ GitHub requires write access to this repository to dispatch it, while the
 control plane uses an Actions-write token scoped to this repository. The control
 plane keeps the deduplication reservation; this workflow has no scheduling state.
 
-Only public repositories are supported initially. The control plane enforces
-that boundary and does not hold customer-repository read tokens. Private
-repository support is intentionally deferred.
+## Private repositories
+
+Private enclave repositories install the small wrapper from
+[`examples/tinfoil-freshness.yml`](examples/tinfoil-freshness.yml). The control
+plane dispatches that wrapper with its GitHub App installation token. The token
+never enters the runner: GitHub calls `private.yml` with the private repository's
+native, repository-scoped `GITHUB_TOKEN`, which can resolve the private tag and
+write to the repository's private attestation store.
+
+The reusable workflow derives the repository from `github.repository`; the
+caller supplies only the exact tag and digest already selected by the control
+plane. It also requires both the original actor and triggering actor to be the
+Tinfoil GitHub App. This rejects manual dispatches and user-initiated reruns.
+Private bundles use GitHub's private Sigstore trust domain (Fulcio plus signed
+RFC 3161 timestamps) instead of public Rekor transparency-log entries.
+
+The control plane later reads the source and freshness bundles with another
+short-lived installation token and gives them to ATC through the internal
+collateral endpoint. Neither ATC, the enclave, nor an external verifier receives
+a GitHub credential.
 
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
