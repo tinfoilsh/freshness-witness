@@ -34,6 +34,7 @@ jobs:
       - name: Build predicate
         id: predicate
         env:
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ inputs.repo }}
           TAG: ${{ inputs.tag }}
           DIGEST: ${{ inputs.digest }}
