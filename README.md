@@ -14,7 +14,8 @@ this repository does not maintain a second registry.
 For the repository, tag, and artifact digest supplied by the control plane, the
 workflow:
 
-1. Constructs the existing freshness predicate for that exact tuple.
+1. Resolves the supplied exact tag to its Git commit and constructs the
+   freshness predicate for that repository, tag, commit, and artifact digest.
 2. Publishes an [`actions/attest`](https://github.com/actions/attest)
    attestation for that release. No witness file is hosted in this repo.
 
@@ -44,6 +45,7 @@ considered fresh.
   "endorses": {
     "repo": "tinfoilsh/confidential-model-router",
     "tag": "v0.0.135",
+    "commit": "<40-character Git commit>",
     "subject": {
       "name": "tinfoil-deployment.json",
       "digest": "sha256:<hex>"

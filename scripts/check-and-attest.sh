@@ -12,6 +12,11 @@ if ! git check-ref-format "refs/tags/${TAG}" >/dev/null || [[ "$TAG" == -* ]]; t
   echo "invalid release tag for ${REPO}: ${TAG}" >&2
   exit 1
 fi
+COMMIT=$(gh api "repos/${REPO}/commits/${TAG}" --jq '.sha')
+if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "invalid commit resolved for ${REPO}@${TAG}: ${COMMIT}" >&2
+  exit 1
+fi
 if ! [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
   echo "invalid release digest for ${REPO}@${TAG}" >&2
   exit 1
@@ -25,6 +30,7 @@ fi
 jq -n \
   --arg repo "$REPO" \
   --arg tag "$TAG" \
+  --arg commit "$COMMIT" \
   --arg subject_name "$ARTIFACT" \
   --arg subject_digest "sha256:${DIGEST}" \
   '{
@@ -32,11 +38,12 @@ jq -n \
     endorses: {
       repo: $repo,
       tag: $tag,
+      commit: $commit,
       subject: {name: $subject_name, digest: $subject_digest}
     }
   }' >predicate.json
 
-echo "freshness witness predicate for ${REPO}@${TAG}:"
+echo "freshness witness predicate for ${REPO}@${TAG} (${COMMIT}):"
 cat predicate.json
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
