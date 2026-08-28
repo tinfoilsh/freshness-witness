@@ -1,0 +1,86 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - run: bash -n scripts/check-and-attest.sh
+
+      - run: shellcheck scripts/check-and-attest.sh
+
+  predicate:
+    name: predicate (${{ matrix.repo }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Published releases whose tags will not move, so the resolved commit is
+        # a stable expectation. One of each artifact name the script emits.
+        include:
+          - repo: tinfoilsh/platform-endorsements
+            tag: v0.0.12
+            commit: db40daef3aa6d9bd85f6acb59683b763ded0c67c
+            digest: 5460918c0cc8f623b0239efa4a1de8fb102c7eb6a1349456206ab00fc2f609f0
+            artifact: platform-endorsements.json
+          - repo: tinfoilsh/confidential-model-router
+            tag: v0.0.142
+            commit: 91194038493c050b2407c378dbbdff52653442dd
+            digest: 7299507cca23c4af0c289564778885d37d9c36dcf13eeb3fe74677b4639c5c91
+            artifact: tinfoil-deployment.json
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Build a predicate for a known release
+        env:
+          REPO: ${{ matrix.repo }}
+          TAG: ${{ matrix.tag }}
+          DIGEST: ${{ matrix.digest }}
+        run: ./scripts/check-and-attest.sh "$REPO" "$TAG" "$DIGEST"
+
+      - name: Assert the predicate binds that release
+        env:
+          REPO: ${{ matrix.repo }}
+          TAG: ${{ matrix.tag }}
+          COMMIT: ${{ matrix.commit }}
+          DIGEST: ${{ matrix.digest }}
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          jq -e \
+            --arg repo "$REPO" \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT" \
+            --arg subject_name "$ARTIFACT" \
+            --arg subject_digest "sha256:${DIGEST}" \
+            '.format == "https://tinfoil.sh/predicate/freshness-witness/v1"
+              and .endorses.repo == $repo
+              and .endorses.tag == $tag
+              and .endorses.commit == $commit
+              and .endorses.subject.name == $subject_name
+              and .endorses.subject.digest == $subject_digest' \
+            predicate.json
+
+      - name: Reject a tag that does not exist
+        env:
+          REPO: ${{ matrix.repo }}
+          DIGEST: ${{ matrix.digest }}
+        run: |
+          rm -f predicate.json
+          if ./scripts/check-and-attest.sh "$REPO" v0.0.0-does-not-exist "$DIGEST"; then
+            echo "expected a failure for a tag that does not exist" >&2
+            exit 1
+          fi
+          if [ -e predicate.json ]; then
+            echo "expected no predicate to be written" >&2
+            exit 1
+          fi
