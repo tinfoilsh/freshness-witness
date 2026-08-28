@@ -1,0 +1,29 @@
+name: Tinfoil freshness
+run-name: Tinfoil freshness for ${{ inputs.tag }}
+
+# Install this file as .github/workflows/tinfoil-freshness.yml in the private
+# enclave repository. The verifier pins the reusable workflow's main identity.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to witness."
+        required: true
+        type: string
+      digest:
+        description: "Release artifact SHA-256 digest."
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  witness:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    uses: tinfoilsh/freshness-witness/.github/workflows/private.yml@main
+    with:
+      tag: ${{ inputs.tag }}
+      digest: ${{ inputs.digest }}

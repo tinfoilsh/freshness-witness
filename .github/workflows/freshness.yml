@@ -29,7 +29,7 @@ jobs:
     name: witness (${{ inputs.repo }})
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.0.0
 
       - name: Build predicate
         id: predicate
@@ -40,7 +40,7 @@ jobs:
         run: ./scripts/check-and-attest.sh "$REPO" "$TAG" "$DIGEST"
 
       - name: Attest freshness witness
-        uses: actions/attest@67422f5511b7ff725f4dbd6fb9bd2cd925c65a8d  # v1.4.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.0.0
         with:
           subject-name: ${{ steps.predicate.outputs.subject_name }}
           subject-digest: ${{ steps.predicate.outputs.subject_digest }}
