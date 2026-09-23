@@ -12,10 +12,14 @@ if ! git check-ref-format "refs/tags/${TAG}" >/dev/null || [[ "$TAG" == -* ]]; t
   echo "invalid release tag for ${REPO}: ${TAG}" >&2
   exit 1
 fi
-REFS=$(git ls-remote "https://github.com/${REPO}" "refs/tags/${TAG}" "refs/tags/${TAG}^{}")
-COMMIT=$(awk -v ref="refs/tags/${TAG}^{}" '$2 == ref {print $1}' <<<"$REFS")
-if [ -z "$COMMIT" ]; then
-  COMMIT=$(awk -v ref="refs/tags/${TAG}" '$2 == ref {print $1}' <<<"$REFS")
+if [ -n "${GH_TOKEN:-}" ]; then
+  COMMIT=$(gh api "repos/${REPO}/commits/${TAG}" --jq .sha)
+else
+  REFS=$(git ls-remote "https://github.com/${REPO}" "refs/tags/${TAG}" "refs/tags/${TAG}^{}")
+  COMMIT=$(awk -v ref="refs/tags/${TAG}^{}" '$2 == ref {print $1}' <<<"$REFS")
+  if [ -z "$COMMIT" ]; then
+    COMMIT=$(awk -v ref="refs/tags/${TAG}" '$2 == ref {print $1}' <<<"$REFS")
+  fi
 fi
 if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
   echo "invalid commit resolved for ${REPO}@${TAG}: ${COMMIT}" >&2

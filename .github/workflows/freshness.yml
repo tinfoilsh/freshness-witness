@@ -31,18 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.0.0
 
-      - name: Build predicate
-        id: predicate
-        env:
-          REPO: ${{ inputs.repo }}
-          TAG: ${{ inputs.tag }}
-          DIGEST: ${{ inputs.digest }}
-        run: ./scripts/check-and-attest.sh "$REPO" "$TAG" "$DIGEST"
-
-      - name: Attest freshness witness
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.0.0
+      - uses: ./
         with:
-          subject-name: ${{ steps.predicate.outputs.subject_name }}
-          subject-digest: ${{ steps.predicate.outputs.subject_digest }}
-          predicate-type: https://tinfoil.sh/predicate/freshness-witness/v1
-          predicate-path: predicate.json
+          repo: ${{ inputs.repo }}
+          tag: ${{ inputs.tag }}
+          digest: ${{ inputs.digest }}

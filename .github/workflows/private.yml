@@ -42,57 +42,10 @@ jobs:
             exit 1
           fi
 
-      - name: Build predicate
-        id: predicate
+      - uses: tinfoilsh/freshness-witness@main
         env:
           GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ inputs.tag }}
-          DIGEST: ${{ inputs.digest }}
-        run: |
-          set -euo pipefail
-          if ! git check-ref-format "refs/tags/${TAG}" >/dev/null || [[ "$TAG" == -* ]]; then
-            echo "invalid release tag for ${REPO}: ${TAG}" >&2
-            exit 1
-          fi
-          if ! [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
-            echo "invalid release digest for ${REPO}@${TAG}" >&2
-            exit 1
-          fi
-
-          COMMIT=$(gh api "repos/${REPO}/commits/${TAG}" --jq .sha)
-          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "invalid commit resolved for ${REPO}@${TAG}: ${COMMIT}" >&2
-            exit 1
-          fi
-
-          jq -n \
-            --arg repo "$REPO" \
-            --arg tag "$TAG" \
-            --arg commit "$COMMIT" \
-            --arg subject_digest "sha256:${DIGEST}" \
-            '{
-              format: "https://tinfoil.sh/predicate/freshness-witness/v1",
-              endorses: {
-                repo: $repo,
-                tag: $tag,
-                commit: $commit,
-                subject: {
-                  name: "tinfoil-deployment.json",
-                  digest: $subject_digest
-                }
-              }
-            }' >predicate.json
-
-          {
-            echo "subject_name=tinfoil-deployment.json"
-            echo "subject_digest=sha256:${DIGEST}"
-          } >>"$GITHUB_OUTPUT"
-
-      - name: Attest freshness witness
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.0.0
         with:
-          subject-name: ${{ steps.predicate.outputs.subject_name }}
-          subject-digest: ${{ steps.predicate.outputs.subject_digest }}
-          predicate-type: https://tinfoil.sh/predicate/freshness-witness/v1
-          predicate-path: predicate.json
+          repo: ${{ github.repository }}
+          tag: ${{ inputs.tag }}
+          digest: ${{ inputs.digest }}

@@ -89,6 +89,9 @@ Tinfoil GitHub App. This rejects manual dispatches and user-initiated reruns.
 Private bundles use GitHub's private Sigstore trust domain (Fulcio plus signed
 RFC 3161 timestamps) instead of public Rekor transparency-log entries.
 
+Both workflows use the same composite action to construct and sign the
+predicate. Their workflow identities and attestation stores remain separate.
+
 The control plane later reads the source and freshness bundles with another
 short-lived installation token and gives them to ATC through the internal
 collateral endpoint. Neither ATC, the enclave, nor an external verifier receives
