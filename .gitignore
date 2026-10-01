@@ -1,1 +1,3 @@
 predicate.json
+__pycache__/
+.venv/
