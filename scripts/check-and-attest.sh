@@ -26,16 +26,15 @@ if ! [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-ARTIFACT=tinfoil-deployment.json
-if [ "$REPO" = tinfoilsh/platform-endorsements ]; then
-  ARTIFACT=${4:-platform-endorsements.json}
-  case "$ARTIFACT" in
-    platform-endorsements.json|platform-endorsements-igvm.json) ;;
-    *) echo "invalid platform artifact: $ARTIFACT" >&2; exit 1 ;;
-  esac
-elif [ "$#" -gt 3 ]; then
-  echo "artifact selection is only supported for platform endorsements" >&2
+if [ "$#" -ne 3 ]; then
+  echo "expected repository, tag, and digest" >&2
   exit 1
+fi
+ARTIFACT=tinfoil-deployment.json
+PLATFORM_REPO=tinfoilsh/cvmimage
+PLATFORM_TAG_PREFIX=platform-
+if [[ "$REPO" = "$PLATFORM_REPO" && "$TAG" = "$PLATFORM_TAG_PREFIX"* ]]; then
+  ARTIFACT=platform-endorsements-classic.json
 fi
 
 jq -n \
