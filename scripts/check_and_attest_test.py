@@ -19,7 +19,7 @@ class FreshnessPredicateTest(unittest.TestCase):
         git.write_text(
             '#!/bin/bash\n'
             'if [ "$1" = ls-remote ]; then\n'
-            f'  printf "%s\\t%s\\n" "{self.commit}" "refs/tags/v1.2.3"\n'
+            f'  printf "%s\\t%s\\n" "{self.commit}" "$3"\n'
             'else\n'
             f'  exec "{shutil.which("git")}" "$@"\n'
             'fi\n'
@@ -27,25 +27,24 @@ class FreshnessPredicateTest(unittest.TestCase):
         git.chmod(0o755)
         self.env = dict(os.environ, PATH=str(self.work) + os.pathsep + os.environ["PATH"], GITHUB_OUTPUT=str(self.work / "outputs"))
 
-    def run_script(self, repo, *artifact):
+    def run_script(self, repo, tag, *artifact):
         return subprocess.run(
-            ["bash", str(self.script), repo, "v1.2.3", self.digest, *artifact],
+            ["bash", str(self.script), repo, tag, self.digest, *artifact],
             cwd=self.work, env=self.env, capture_output=True, text=True,
         )
 
-    def test_default_and_igvm_subjects_bind_the_same_exact_release(self):
-        for repo, artifact in (
-            ("owner/workload", "tinfoil-deployment.json"),
-            ("tinfoilsh/platform-endorsements", "platform-endorsements.json"),
-            ("tinfoilsh/platform-endorsements", "platform-endorsements-igvm.json"),
+    def test_subjects_bind_the_exact_release(self):
+        for repo, tag, artifact in (
+            ("owner/workload", "v1.2.3", "tinfoil-deployment.json"),
+            ("tinfoilsh/cvmimage", "v1.2.3", "tinfoil-deployment.json"),
+            ("tinfoilsh/cvmimage", "platform-v1.2.3", "platform-endorsements-classic.json"),
         ):
             with self.subTest(artifact=artifact):
-                override = (artifact,) if artifact.endswith("-igvm.json") else ()
-                result = self.run_script(repo, *override)
+                result = self.run_script(repo, tag)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 predicate = json.loads((self.work / "predicate.json").read_text())
                 self.assertEqual(predicate["endorses"], {
-                    "repo": repo, "tag": "v1.2.3", "commit": self.commit,
+                    "repo": repo, "tag": tag, "commit": self.commit,
                     "subject": {"name": artifact, "digest": "sha256:" + self.digest},
                 })
                 self.assertIn("subject_name=" + artifact, (self.work / "outputs").read_text())
@@ -53,10 +52,10 @@ class FreshnessPredicateTest(unittest.TestCase):
     def test_rejects_other_repository_or_artifact_overrides(self):
         for repo, artifact in (
             ("owner/workload", "platform-endorsements-igvm.json"),
-            ("tinfoilsh/platform-endorsements", "other.json"),
+            ("tinfoilsh/cvmimage", "other.json"),
         ):
             with self.subTest(repo=repo, artifact=artifact):
-                result = self.run_script(repo, artifact)
+                result = self.run_script(repo, "platform-v1.2.3", artifact)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse((self.work / "predicate.json").exists())
 

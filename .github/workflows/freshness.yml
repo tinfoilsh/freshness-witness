@@ -15,9 +15,6 @@ on:
       digest:
         description: "Release artifact SHA-256 digest."
         required: true
-      igvm_digest:
-        description: "Optional IGVM platform artifact SHA-256 digest."
-        required: false
 permissions:
   id-token: write
   attestations: write
@@ -33,24 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-
-      - name: Build IGVM platform predicate
-        if: ${{ inputs.igvm_digest != '' }}
-        id: igvm-predicate
-        env:
-          REPO: ${{ inputs.repo }}
-          TAG: ${{ inputs.tag }}
-          DIGEST: ${{ inputs.igvm_digest }}
-        run: ./scripts/check-and-attest.sh "$REPO" "$TAG" "$DIGEST" platform-endorsements-igvm.json
-
-      - name: Attest IGVM platform freshness witness
-        if: ${{ inputs.igvm_digest != '' }}
-        uses: actions/attest@67422f5511b7ff725f4dbd6fb9bd2cd925c65a8d  # v1.4.1
-        with:
-          subject-name: ${{ steps.igvm-predicate.outputs.subject_name }}
-          subject-digest: ${{ steps.igvm-predicate.outputs.subject_digest }}
-          predicate-type: https://tinfoil.sh/predicate/freshness-witness/v1
-          predicate-path: predicate.json
 
       - name: Build predicate
         id: predicate
