@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: freshness-${{ inputs.repo }}
+  group: freshness-${{ inputs.repo }}@${{ inputs.tag }}#${{ inputs.digest }}
   cancel-in-progress: false
 
 jobs:
