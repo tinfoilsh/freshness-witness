@@ -1,6 +1,6 @@
-# Tinfoil freshness witness
+# Tinfoil fresh endorsements
 
-Publishes a small, independently-signed **freshness witness** for the exact
+Publishes a small, independently-signed **fresh endorsement** for the exact
 repository version selected by Tinfoil's control plane. The control plane owns
 repository discovery, endorsement policy, scheduling, retries, and availability.
 
@@ -60,13 +60,18 @@ enforce a hardcoded seven-day maximum age.
 
 ## Triggers
 
-- **Reconciled**: Tinfoil's control plane checks its active repository set every
-  minute and dispatches this workflow when latest has no valid witness with more
-  than two days remaining.
+- **Reconciled**: Tinfoil's control plane renews latest and explicitly selected
+  versions when their fresh endorsements enter the renewal window. Selected
+  versions stop renewing when the organization's last running replica stops.
+- **Manual refresh**: the Containers dashboard can request an exact version's
+  fresh endorsement when it is missing, expired, or within the renewal window.
+  The control plane owns the [lifetime and renewal constants](https://github.com/tinfoilsh/controlplane/blob/main/constants/freshness.go).
 - **Switching latest**: when requested for a deploy, the control plane first
   dispatches an exact endorsement and then immediately marks that release
   latest. Deployment launch and acceptance never wait for witness publication.
-  Non-latest releases are not renewed.
+
+Concurrent requests are grouped by repository, tag, and digest so different
+versions do not replace each other's pending workflow runs.
 
 The workflow inputs are `owner/repo`, release tag, and artifact SHA-256 digest.
 GitHub requires write access to this repository to dispatch it, while the
@@ -80,7 +85,7 @@ repository support is intentionally deferred.
 Deliberately **never** GitHub's native `schedule:` trigger — GitHub
 auto-disables `schedule`-triggered workflows after 60 days of repository
 inactivity, which would silently break this without an external caller
-noticing. Both triggers above are externally invoked instead.
+noticing. The triggers above are externally invoked instead.
 
 Standard enclave repositories use `tinfoil-deployment.json` as the subject.
 The global platform-endorsements dependency uses
